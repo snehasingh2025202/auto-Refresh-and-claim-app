@@ -14,15 +14,26 @@ class ClaimAccessibilityService : AccessibilityService() {
     private val logTag = "ClaimAccessibility"
     private lateinit var prefs: SharedPreferences
     private var lastActionTime = 0L
+    private var isProcessing = false
 
     private val claimKeywords = listOf("claim", "redeem", "collect")
     private val confirmKeywords = listOf("confirm", "ok", "yes", "submit")
+
+    private val scanRunnable = object : Runnable {
+        override fun run() {
+            if (!isProcessing) {
+                processWindow()
+            }
+            handler.postDelayed(this, getRefreshInterval().coerceAtLeast(1000L))
+        }
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         prefs = applicationContext.getSharedPreferences(Preferences.PREFS_FILE, Context.MODE_PRIVATE)
         LogRepository.add("Accessibility service connected")
         Log.i(logTag, "Accessibility service connected")
+        startScanning()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -30,17 +41,28 @@ class ClaimAccessibilityService : AccessibilityService() {
             event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
             event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED ||
             event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
-            val now = System.currentTimeMillis()
-            val interval = getRefreshInterval().coerceAtLeast(500L)
-            if (now - lastActionTime >= interval) {
-                handler.removeCallbacksAndMessages(null)
+            if (!isProcessing) {
                 handler.post { processWindow() }
             }
         }
     }
 
     override fun onInterrupt() {
-        // no-op
+        stopScanning()
+    }
+
+    override fun onDestroy() {
+        stopScanning()
+        super.onDestroy()
+    }
+
+    private fun startScanning() {
+        handler.removeCallbacks(scanRunnable)
+        handler.postDelayed(scanRunnable, getRefreshInterval().coerceAtLeast(1000L))
+    }
+
+    private fun stopScanning() {
+        handler.removeCallbacks(scanRunnable)
     }
 
     private fun getRefreshInterval(): Long {
@@ -49,6 +71,7 @@ class ClaimAccessibilityService : AccessibilityService() {
 
     private fun processWindow() {
         val rootNode = rootInActiveWindow ?: return
+        isProcessing = true
 
         val claimNodes = findNodesByKeywords(rootNode, claimKeywords)
         if (claimNodes.isNotEmpty()) {
@@ -58,26 +81,30 @@ class ClaimAccessibilityService : AccessibilityService() {
                     LogRepository.add("Clicked claim button")
                     Log.i(logTag, "Clicked claim button")
                     handler.postDelayed({ processConfirmWindow() }, 500)
+                    isProcessing = false
                     return
                 }
             }
         }
 
-        // If no claim was clicked, continue scanning after the interval.
-        handler.postDelayed({ processWindow() }, getRefreshInterval())
+        isProcessing = false
     }
 
     private fun processConfirmWindow() {
         val rootNode = rootInActiveWindow ?: return
+        isProcessing = true
+
         val confirmNodes = findNodesByKeywords(rootNode, confirmKeywords)
         for (node in confirmNodes) {
             if (clickNode(node)) {
                 lastActionTime = System.currentTimeMillis()
                 LogRepository.add("Clicked confirm button")
                 Log.i(logTag, "Clicked confirm button")
-                return
+                break
             }
         }
+
+        isProcessing = false
     }
 
     private fun findNodesByKeywords(node: AccessibilityNodeInfo, keywords: List<String>): List<AccessibilityNodeInfo> {
