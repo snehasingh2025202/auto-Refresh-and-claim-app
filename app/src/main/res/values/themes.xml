@@ -1,5 +1,5 @@
 <resources>
-    <style name="Theme.AutoRefreshClaim" parent="Theme.Material3.DayNight.DarkActionBar">
+    <style name="Theme.AutoRefreshClaim" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:statusBarColor">?android:colorPrimaryDark</item>
     </style>
 </resources>
