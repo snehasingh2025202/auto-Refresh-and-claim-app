@@ -22,11 +22,6 @@ class ClaimAccessibilityService : AccessibilityService() {
         Log.i(logTag, "Accessibility service connected")
     }
 
-    override fun onServiceDisconnected() {
-        super.onServiceDisconnected()
-        LogRepository.add("Accessibility service disconnected")
-    }
-
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
             event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
