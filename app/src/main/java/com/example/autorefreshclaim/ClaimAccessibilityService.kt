@@ -12,8 +12,11 @@ import android.view.accessibility.AccessibilityNodeInfo
 class ClaimAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private val logTag = "ClaimAccessibility"
-    private var isProcessing = false
     private lateinit var prefs: SharedPreferences
+    private var lastActionTime = 0L
+
+    private val claimKeywords = listOf("claim", "redeem", "collect")
+    private val confirmKeywords = listOf("confirm", "ok", "yes", "submit")
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -24,10 +27,14 @@ class ClaimAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
-            event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-            if (!isProcessing) {
-                isProcessing = true
-                handler.postDelayed({ processWindow() }, getRefreshInterval())
+            event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
+            event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED ||
+            event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+            val now = System.currentTimeMillis()
+            val interval = getRefreshInterval().coerceAtLeast(500L)
+            if (now - lastActionTime >= interval) {
+                handler.removeCallbacksAndMessages(null)
+                handler.post { processWindow() }
             }
         }
     }
@@ -41,61 +48,66 @@ class ClaimAccessibilityService : AccessibilityService() {
     }
 
     private fun processWindow() {
-        val rootNode = rootInActiveWindow ?: run {
-            isProcessing = false
-            return
-        }
+        val rootNode = rootInActiveWindow ?: return
 
-        val claimNodes = findNodesByText(rootNode, "claim")
-        var clickedClaim = false
-
-        for (node in claimNodes) {
-            if (clickNode(node)) {
-                LogRepository.add("Clicked claim button")
-                Log.i(logTag, "Clicked claim button")
-                clickedClaim = true
-                break
+        val claimNodes = findNodesByKeywords(rootNode, claimKeywords)
+        if (claimNodes.isNotEmpty()) {
+            for (node in claimNodes) {
+                if (clickNode(node)) {
+                    lastActionTime = System.currentTimeMillis()
+                    LogRepository.add("Clicked claim button")
+                    Log.i(logTag, "Clicked claim button")
+                    handler.postDelayed({ processConfirmWindow() }, 500)
+                    return
+                }
             }
         }
 
-        if (clickedClaim) {
-            handler.postDelayed({
-                val confirmRoot = rootInActiveWindow ?: return@postDelayed
-                val confirmNodesNext = findNodesByText(confirmRoot, "confirm")
-                for (confirmNode in confirmNodesNext) {
-                    if (clickNode(confirmNode)) {
-                        LogRepository.add("Clicked confirm button")
-                        Log.i(logTag, "Clicked confirm button")
-                        break
-                    }
-                }
-                isProcessing = false
-            }, 500)
-        } else {
-            isProcessing = false
+        // If no claim was clicked, continue scanning after the interval.
+        handler.postDelayed({ processWindow() }, getRefreshInterval())
+    }
+
+    private fun processConfirmWindow() {
+        val rootNode = rootInActiveWindow ?: return
+        val confirmNodes = findNodesByKeywords(rootNode, confirmKeywords)
+        for (node in confirmNodes) {
+            if (clickNode(node)) {
+                lastActionTime = System.currentTimeMillis()
+                LogRepository.add("Clicked confirm button")
+                Log.i(logTag, "Clicked confirm button")
+                return
+            }
         }
     }
 
-    private fun findNodesByText(node: AccessibilityNodeInfo, text: String): List<AccessibilityNodeInfo> {
-        val lower = text.lowercase()
+    private fun findNodesByKeywords(node: AccessibilityNodeInfo, keywords: List<String>): List<AccessibilityNodeInfo> {
         val result = mutableListOf<AccessibilityNodeInfo>()
-        if (node.text?.toString()?.lowercase()?.contains(lower) == true) {
+        if (matchesKeywords(node, keywords)) {
             result.add(node)
         }
         for (i in 0 until node.childCount) {
-            node.getChild(i)?.let { result.addAll(findNodesByText(it, text)) }
+            node.getChild(i)?.let { result.addAll(findNodesByKeywords(it, keywords)) }
         }
         return result
     }
 
+    private fun matchesKeywords(node: AccessibilityNodeInfo, keywords: List<String>): Boolean {
+        val lowerText = node.text?.toString()?.lowercase() ?: ""
+        val lowerDesc = node.contentDescription?.toString()?.lowercase() ?: ""
+        val lowerRes = node.viewIdResourceName?.lowercase() ?: ""
+        return keywords.any { keyword ->
+            lowerText.contains(keyword) || lowerDesc.contains(keyword) || lowerRes.contains(keyword)
+        }
+    }
+
     private fun clickNode(node: AccessibilityNodeInfo): Boolean {
-        if (node.isClickable) {
-            return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        if (node.isClickable && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            return true
         }
         var parent = node.parent
         while (parent != null) {
-            if (parent.isClickable) {
-                return parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            if (parent.isClickable && parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                return true
             }
             parent = parent.parent
         }
