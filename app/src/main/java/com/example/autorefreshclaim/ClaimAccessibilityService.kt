@@ -71,6 +71,8 @@ class ClaimAccessibilityService : AccessibilityService() {
 
     private fun processWindow() {
         val rootNode = rootInActiveWindow ?: return
+        if (!Preferences.isAutomationEnabled(prefs)) return
+        if (isOwnApp(rootNode)) return
         isProcessing = true
 
         val claimNodes = findNodesByKeywords(rootNode, claimKeywords)
@@ -88,6 +90,11 @@ class ClaimAccessibilityService : AccessibilityService() {
         }
 
         isProcessing = false
+    }
+
+    private fun isOwnApp(rootNode: AccessibilityNodeInfo): Boolean {
+        val packageName = rootNode.packageName?.toString() ?: return false
+        return packageName == applicationContext.packageName
     }
 
     private fun processConfirmWindow() {

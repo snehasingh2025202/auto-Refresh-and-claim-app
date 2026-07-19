@@ -44,9 +44,8 @@ fun AutoRefreshClaimApp() {
         mutableStateOf(Preferences.loadRefreshInterval(prefs).toString())
     }
     var savedMessage by remember { mutableStateOf("") }
-    var serviceEnabled by remember {
-        mutableStateOf(isAccessibilityServiceEnabled(context))
-    }
+    var serviceEnabled by remember { mutableStateOf(isAccessibilityServiceEnabled(context)) }
+    var automationEnabled by remember { mutableStateOf(Preferences.isAutomationEnabled(prefs)) }
     val scrollState = rememberScrollState()
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -96,29 +95,35 @@ fun AutoRefreshClaimApp() {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text("Accessibility service status", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        if (serviceEnabled) "Enabled" else "Disabled",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (serviceEnabled) Color(0xFF388E3C) else Color(0xFFD32F2F)
-                    )
-                }
-                Switch(
-                    checked = serviceEnabled,
-                    onCheckedChange = {
-                        serviceEnabled = isAccessibilityServiceEnabled(context)
-                        context.startActivity(
-                            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                        )
+            Button(
+                onClick = {
+                    val enabled = !automationEnabled
+                    Preferences.saveAutomationEnabled(prefs, enabled)
+                    automationEnabled = enabled
+                    savedMessage = if (enabled) {
+                        "Automation started. Switch to target app now."
+                    } else {
+                        "Automation stopped."
                     }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (automationEnabled) "Stop automation" else "Start automation")
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text("Accessibility service status", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    if (serviceEnabled) "Enabled" else "Disabled",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (serviceEnabled) Color(0xFF388E3C) else Color(0xFFD32F2F)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    "Automation status: ${if (automationEnabled) "Active" else "Inactive"}",
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
 
@@ -137,12 +142,17 @@ fun AutoRefreshClaimApp() {
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                "3. The accessibility service will scan for 'Claim' and 'Confirm' buttons and click them automatically.",
+                "3. Press Start automation and then open the target app where claim buttons appear.",
                 style = MaterialTheme.typography.bodyMedium
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                "4. The service periodically checks the active screen using the saved interval.",
+                "4. The service only scans other apps when automation is active and accessibility permission is granted.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "5. Do not set the refresh interval too low; values under 1000ms are not recommended.",
                 style = MaterialTheme.typography.bodyMedium
             )
 
