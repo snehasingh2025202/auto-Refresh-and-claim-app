@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Auto Refresh &amp; Claim</string>
+    <string name="accessibility_service_description">Auto click claim and confirm buttons</string>
+</resources>
