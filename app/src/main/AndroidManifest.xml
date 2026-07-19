@@ -4,7 +4,7 @@
 
     <application
         android:allowBackup="true"
-        android:label="Auto Refresh & Claim"
+        android:label="Auto Refresh &amp; Claim"
         android:theme="@style/Theme.AutoRefreshClaim">
 
         <activity android:name=".MainActivity" android:exported="true">
